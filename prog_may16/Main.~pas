@@ -1,0 +1,126 @@
+unit Main;
+
+interface
+
+uses
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls;
+
+type
+  TMainForm = class(TForm)
+    OpenPort: TButton;
+    ClosePort: TButton;
+    SendData: TButton;
+    Edit1: TEdit;
+    ReadData: TButton;
+    PortStateLabel: TLabel;
+    Label1: TLabel;
+    Label2: TLabel;
+    nToReadLabel: TLabel;
+    nReadLabel: TLabel;
+    Label3: TLabel;
+    RcDataLabel: TLabel;
+    procedure OpenPortClick(Sender: TObject);
+    procedure ClosePortClick(Sender: TObject);
+    procedure SendDataClick(Sender: TObject);
+    procedure ReadDataClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  MainForm: TMainForm;
+
+implementation
+Var
+Port:THandle;
+
+{$R *.dfm}
+
+procedure TMainForm.OpenPortClick(Sender: TObject);
+Var
+ DCB:TDCB;    //структура, содержащая настройки порта
+ CommTimeouts:TCommTimeouts;
+begin
+  Port:=CreateFile(
+    '\\.\COM1',                   //открываем первый порт
+    GENERIC_READ or GENERIC_WRITE,//открываем порт для чтения и записи
+    0,                            //общий доступ к ресурсу запрещен, для портов всегда так
+    nil,                          //атрибуты защиты, не используются и потому nil
+    OPEN_EXISTING,                //атрибуты открытия, для портов OPEN_EXISTING
+    FILE_ATTRIBUTE_NORMAL,         //для синхронной работы так
+    0                           //хз что это, но должно быть так
+  );
+ if (port=INVALID_HANDLE_VALUE)  //если порт не окрылся
+  then showmessage('Ошибочка вышла!') //то выводим сообщение об ошибке
+  else POrtStateLabel.Caption:='Порт открыт';       //Если порт открылся, то пишем что открылся
+
+  GetCommState(port, DCB);        //что бы не заполнять всю структуру самим, сначал считываем ее, потом поменяем нужные поля
+  DCB.BaudRate:=9600;             // скорость обмена
+  DCB.Parity:=NoParity;           // нет контроля четности
+  DCB.ByteSize:=8;                //байт из восьми бит
+  DCB.StopBits:=ONESTOPBIT;       //один стоповый бит
+  SetCommState(port, DCB);        //записываем измененную структуру, для открытого порта
+
+  GetCommTimeouts(Port, CommTimeouts); //получаем структуру CommTimeouts что бы не заполнять все вручную
+  CommTimeouts.ReadIntervalTimeout :=MAXDWORD;  //функция ReadFile возвращает
+  CommTimeouts.ReadTotalTimeoutMultiplier := 0; //немедленно все имеющиеся
+  CommTimeouts.ReadTotalTimeoutConstant := 0;   //байты в приемном буфере
+  CommTimeouts.WriteTotalTimeoutMultiplier := 0;//общий тайм-аут для
+  CommTimeouts.WriteTotalTimeoutConstant := 0;  //операции записи не используется.
+  SetCommTimeouts(Port, CommTimeouts); //записываем измененную структуру
+
+end;
+
+
+procedure TMainForm.ClosePortClick(Sender: TObject);
+begin
+ if not CloseHandle(Port)                 //если порт  не закрылся
+  then showmessage('Не закрылось')        //то пишем что он не закрылся
+  else PortStateLabel.Caption:='Порт не открыт'   //если всетаки закрылся , то пишем, что закрылся :)
+end;
+
+procedure TMainForm.SendDataClick(Sender: TObject);
+var
+  TRBuf:PChar;    //буфер данных для передачи
+  nToWrite:DWord; //число байт для записи
+  nWrite:DWord;   //число записанных байт
+begin
+  TRBuf:=PChar(Edit1.Text);         //заполняем буфер данными
+  nToWrite:=length(TRBuf)+1;        //число передаваемых байт
+  WriteFile(port,TRBuf^,nToWrite,nWrite,nil); //собственно отпавляем данные
+end;
+
+procedure TMainForm.ReadDataClick(Sender: TObject);
+Var
+  RCBuf:PChar;        //Буфер данных для приема
+  nToRead:Cardinal;   //Число байт для чтения
+  nRead:Cardinal;     //Число прочитанных байт
+  ComStat:TComStat;   //состояние порта
+  Errs:Cardinal;
+begin
+  ClearCommError(POrt,Errs,@ComStat);       //считываем состояние порта
+  nToRead:=ComStat.cbInQue;                 //считываем число байт для чтения из структуры
+  nToReadLabel.Caption:=IntToStr(nToRead);  //выводим на форму число байт для чтения
+  ReadFile(Port,RCBuf^,nToRead,nRead,nil);  //считываем данные
+  nReadLabel.Caption:=IntToStr(nRead);      //выводим на форму число прочитанных байт
+  RcDataLabel.Caption:=RCBuf;
+end;
+
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  nToreadLabel.Caption:=''; //Очищаем метки
+  nReadLabel.Caption:='';
+  RcDataLabel.Caption:='';
+end;
+
+procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+CloseHandle(Port)                 //закрываем порт
+end;
+
+end.
